@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Design Unflattener</title>
+  <meta name="description" content="Turn a photo or screenshot of a magazine design into layered, editable files for Photoshop and Canva.">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect x='3' y='9' width='20' height='20' rx='3' fill='%23e8dccb'/><rect x='9' y='3' width='20' height='20' rx='3' fill='%23c2410c'/></svg>">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo" aria-hidden="true"></span>
+      <div>
+        <h1>Design Unflattener</h1>
+        <p>Image in. Editable Photoshop &amp; Canva files out.</p>
+      </div>
+    </div>
+    <button id="newBtn" class="ghost" hidden>New design</button>
+  </header>
+
+  <main>
+    <!-- Step 1: upload -->
+    <section id="uploadView" class="view">
+      <label id="dropzone" class="dropzone" tabindex="0">
+        <input id="fileInput" type="file" accept="image/*" hidden>
+        <div class="dz-inner">
+          <div class="dz-icon" aria-hidden="true">
+            <svg viewBox="0 0 48 48" width="48" height="48"><rect x="6" y="10" width="28" height="32" rx="3" fill="none" stroke="currentColor" stroke-width="2.5"/><rect x="14" y="6" width="28" height="32" rx="3" fill="var(--paper)" stroke="currentColor" stroke-width="2.5"/><path d="M20 16h16M20 22h16M20 28h10" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg>
+          </div>
+          <h2>Drop a magazine page, cover or ad</h2>
+          <p>PNG, JPG, WEBP or TIFF, up to 30&nbsp;MB. A straight-on scan or screenshot works best.</p>
+          <span class="btn primary">Choose image</span>
+        </div>
+      </label>
+      <div class="options">
+        <label class="toggle" id="aiToggleWrap">
+          <input type="checkbox" id="aiToggle" checked>
+          <span>AI layout analysis <small id="aiStatus"></small></span>
+        </label>
+      </div>
+      <ol class="how">
+        <li><b>Text becomes live type.</b> Every headline, deck and caption is detected, read and rebuilt as an editable text layer with matched size, colour, weight and alignment.</li>
+        <li><b>Images get their own layers.</b> Photos, panels and shapes are lifted off the page, and the text is erased from what's behind it.</li>
+        <li><b>Open anywhere.</b> Download a layered PSD for Photoshop, and a PPTX or PDF you can import straight into Canva.</li>
+      </ol>
+    </section>
+
+    <!-- Step 2: processing -->
+    <section id="progressView" class="view" hidden>
+      <div class="progress-card">
+        <img id="progressThumb" alt="">
+        <div class="progress-body">
+          <h2 id="progressStage">Uploading…</h2>
+          <div class="bar"><div id="progressBar"></div></div>
+          <p class="muted">Usually takes 10–60 seconds depending on how much text is on the page.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Step 3: editor -->
+    <section id="editorView" class="view editor" hidden>
+      <div class="canvas-col">
+        <div class="canvas-toolbar">
+          <div class="seg" role="group" aria-label="View">
+            <button data-view="rebuilt" class="active">Rebuilt</button>
+            <button data-view="original">Original</button>
+            <button data-view="background">Background only</button>
+          </div>
+          <label class="zoom">Zoom <input id="zoom" type="range" min="10" max="200" value="100"></label>
+        </div>
+        <div id="viewport" class="viewport">
+          <div id="stage" class="stage"></div>
+        </div>
+        <div id="warnings" class="warnings"></div>
+      </div>
+
+      <aside class="panel">
+        <div class="panel-section">
+          <h3>Download</h3>
+          <div id="downloads" class="downloads"></div>
+          <button id="rebuildBtn" class="btn primary block" disabled>Apply edits to files</button>
+          <p class="hint" id="rebuildHint">Edit text, fonts or positions below, then rebuild the files.</p>
+        </div>
+
+        <div class="panel-section" id="propsSection" hidden>
+          <h3>Text layer</h3>
+          <label class="field"><span>Text</span><textarea id="pText" rows="3"></textarea></label>
+          <div class="row">
+            <label class="field grow"><span>Font</span><input id="pFont" list="fontList" autocomplete="off"></label>
+            <label class="field"><span>Style</span>
+              <select id="pCategory">
+                <option value="serif">Serif</option><option value="sans-serif">Sans</option><option value="display">Display</option><option value="script">Script</option><option value="monospace">Mono</option>
+              </select>
+            </label>
+          </div>
+          <div class="row">
+            <label class="field"><span>Size</span><input id="pSize" type="number" min="1" step="0.5"></label>
+            <label class="field"><span>Line height</span><input id="pLine" type="number" min="1" step="0.5"></label>
+            <label class="field"><span>Tracking</span><input id="pTrack" type="number" step="0.1"></label>
+          </div>
+          <div class="row">
+            <label class="field"><span>Weight</span>
+              <select id="pWeight">
+                <option value="100">Thin</option><option value="200">Extra light</option><option value="300">Light</option><option value="400">Regular</option><option value="500">Medium</option><option value="600">Semibold</option><option value="700">Bold</option><option value="800">Extra bold</option><option value="900">Black</option>
+              </select>
+            </label>
+            <label class="field"><span>Colour</span><input id="pColor" type="color"></label>
+            <label class="field check"><input id="pItalic" type="checkbox"><span>Italic</span></label>
+          </div>
+          <div class="seg align" role="group" aria-label="Alignment" id="pAlign">
+            <button data-align="left">Left</button><button data-align="center">Center</button><button data-align="right">Right</button><button data-align="justify">Justify</button>
+          </div>
+        </div>
+
+        <div class="panel-section layers-section">
+          <h3>Layers <small id="layerCount"></small></h3>
+          <ul id="layerList" class="layer-list"></ul>
+        </div>
+
+        <div class="panel-section">
+          <h3>Opening your files</h3>
+          <details><summary>Photoshop</summary><p>Open <b>design.psd</b>. If Photoshop asks to update text layers, choose <b>Update</b> — the type is then live and editable. Missing fonts are free Google Fonts; install them for an exact match or let Photoshop substitute.</p></details>
+          <details><summary>Canva</summary><p>In Canva choose <b>Create a design → Import file</b> and upload <b>design.pptx</b> (best) or <b>design.pdf</b>. Every text box and image arrives as a separate, editable element.</p></details>
+          <details><summary>Illustrator, Figma, Affinity</summary><p>Use <b>design.svg</b> or <b>design.pdf</b>. Layer PNGs and a <b>layout.json</b> are in the ZIP bundle.</p></details>
+        </div>
+      </aside>
+    </section>
+  </main>
+
+  <datalist id="fontList"></datalist>
+  <script src="app.js" type="module"></script>
+</body>
+</html>
