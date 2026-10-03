@@ -7,10 +7,12 @@ import { postScriptName, readRgba, textGeometry, textLines } from './common.js';
  *   Text (group)    – live, editable type layers
  *   Images (group)  – photos / shapes as separate pixel layers
  *   Background      – clean plate with text and graphics removed
- *   Original        – hidden reference copy of the upload
+ *
+ * The original upload is deliberately NOT embedded: some importers (Canva, older
+ * viewers) ignore the hidden flag or show only the composite, which made the
+ * file look like a flat copy of the photo.
  */
-export async function buildPsd(jobDir, layout) {
-  const original = await readRgba(jobDir, layout.original);
+export async function buildPsd(jobDir, layout, { composite } = {}) {
   const background = await readRgba(jobDir, layout.background.src);
 
   const imageChildren = [];
@@ -20,16 +22,17 @@ export async function buildPsd(jobDir, layout) {
       const img = await readRgba(jobDir, layer.src);
       imageChildren.push({ name: layer.name, left: Math.round(layer.x), top: Math.round(layer.y), imageData: img, hidden: layer.visible === false });
     } else if (layer.type === 'text') {
-      textChildren.push(await textLayer(jobDir, layer));
+      textChildren.push(textLayer(layer));
     }
   }
 
   const psd = {
     width: layout.width,
     height: layout.height,
-    imageData: original, // composite preview (thumbnail / apps without layer support)
+    // Composite = the rebuilt design (rendered from our SVG), used for thumbnails and
+    // by apps that can't read layers.
+    imageData: composite || background,
     children: [
-      { name: 'Original (reference)', hidden: true, imageData: original },
       { name: 'Background', imageData: background },
       { name: 'Images', opened: true, children: imageChildren.reverse() },
       { name: 'Text', opened: true, children: textChildren.reverse() },
@@ -39,7 +42,7 @@ export async function buildPsd(jobDir, layout) {
   return Buffer.from(writePsdBuffer(psd, { invalidateTextLayers: true, generateThumbnail: false }));
 }
 
-async function textLayer(jobDir, layer) {
+function textLayer(layer) {
   const { baseline, anchorX } = textGeometry(layer);
   const [r, g, b] = fromHex(layer.color);
   const text = textLines(layer).join('\r');
@@ -65,14 +68,6 @@ async function textLayer(jobDir, layer) {
       },
     },
   };
-  // Pre-rendered pixels so the layer looks right even before Photoshop updates it
-  // (and in viewers that can't render type).
-  if (layer.preview && layer.previewBox && !layer.edited) {
-    try {
-      tl.imageData = await readRgba(jobDir, layer.preview);
-      tl.left = layer.previewBox.x; tl.top = layer.previewBox.y;
-    } catch { /* preview is optional */ }
-  }
   return tl;
 }
 

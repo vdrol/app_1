@@ -5,6 +5,7 @@ import { ZipArchive } from 'archiver';
 import { buildPsd } from './psd.js';
 import { buildPptx } from './pptx.js';
 import { buildPdf } from './pdf.js';
+import sharp from 'sharp';
 import { buildSvg } from './svg.js';
 
 export const EXPORTS = [
@@ -18,14 +19,25 @@ export const EXPORTS = [
 export async function buildExports(jobDir, layout) {
   await fs.writeFile(path.join(jobDir, 'layout.json'), JSON.stringify(layout, null, 2));
   const files = [];
-  for (const exp of EXPORTS) {
-    const buf = await exp.build(jobDir, layout);
+  const ctx = {};
+  for (const exp of [...EXPORTS].reverse()) { // SVG first: its render is the PSD composite
+    const buf = await exp.build(jobDir, layout, ctx);
+    if (exp.file === 'design.svg') ctx.composite = await renderSvg(buf);
     await fs.writeFile(path.join(jobDir, exp.file), buf);
-    files.push({ file: exp.file, label: exp.label, bytes: buf.length });
+    files.unshift({ file: exp.file, label: exp.label, bytes: buf.length });
   }
   const zipBytes = await zipBundle(jobDir, layout, files.map((f) => f.file));
   files.push({ file: 'design-bundle.zip', label: 'Everything + separate layer PNGs (.zip)', bytes: zipBytes });
   return files;
+}
+
+async function renderSvg(svg) {
+  try {
+    const { data, info } = await sharp(svg).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+    return { width: info.width, height: info.height, data: new Uint8ClampedArray(data.buffer, data.byteOffset, data.length) };
+  } catch {
+    return undefined; // fall back to the background plate
+  }
 }
 
 function zipBundle(jobDir, layout, exportFiles) {

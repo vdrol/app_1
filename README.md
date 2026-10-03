@@ -4,7 +4,7 @@ Upload **one image** of a magazine page, cover, poster or ad. Get back a **layer
 
 | File | Open in | What you get |
 |---|---|---|
-| `design.psd` | Photoshop, Photopea, Affinity | Live **type layers** (editable text with font, size, colour, leading, alignment), separate image layers, a clean background with the text erased, and a hidden copy of the original for reference |
+| `design.psd` | Photoshop, Photopea, Affinity | Live **type layers** (editable text with font, size, colour, leading, alignment), separate image layers, and a clean background with the text erased (the flat original is not embedded, so nothing can sit under or replace your layers) |
 | `design.pptx` | **Canva** (Create a design → Import file), PowerPoint, Keynote, Google Slides | Slide sized to the design; every text box and image is a separate editable element. The most reliable way into Canva |
 | `design.pdf` | Canva, Illustrator, Acrobat | Vector PDF with live text over image layers |
 | `design.svg` | Illustrator, Figma, Inkscape | Live `<text>` and embedded image layers |
@@ -23,7 +23,7 @@ image ─► OCR (4 preprocessing passes + per-line re-read) ─┐
                                          exporters: PSD (ag-psd) · PPTX (pptxgenjs) · PDF (pdfkit) · SVG
 ```
 
-1. **Text detection.** Tesseract runs on the original, greyscale, inverted and sparse-text versions of the page, because a single pass drops coloured headlines and light-on-dark type. Lines are split at column gutters, de-duplicated, then each line is re-read from a crop binarised with its own ink and paper colours.
+1. **Text detection.** Tesseract runs on the original and greyscale page plus Sauvola-binarised maps (light-on-dark and dark-on-light, at two window sizes, plus a half-size pass for giant mastheads). The binarised maps strip a photographic background down to crisp letterforms, so type printed over photos is found too. Lines are split at column gutters, de-duplicated, then each line is re-read from a crop binarised with its own ink and paper colours.
 2. **Layout understanding (optional, recommended).** With an Anthropic API key, Claude reads the page to group lines into text frames, transcribe stylised display type, label roles (masthead, headline, body…), suggest the closest Google Font, and find photos. Its blocks are snapped to the precise OCR boxes.
 3. **Typography measurement.** Font size comes from line-box height and glyph classes (caps, ascenders, descenders). Leading comes from baseline pitch, colour from 2-means ink/paper clustering, weight from stroke width, and alignment from line edges.
 4. **Background reconstruction.** Text pixels (with anti-aliasing) are masked and filled with a push–pull pyramid inpainter, with grain re-added on textured backgrounds.

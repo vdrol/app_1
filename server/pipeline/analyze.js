@@ -2,7 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { loadRaster, rasterToPng, cropRaster, cloneRaster, toHex, colorDist, clampBox, coverage, iou, unionBox } from './image.js';
 import { detectTextLines } from './ocr.js';
-import { analyzeTextBox, estimateFontSize, baselineOffset, inferAlign, strokeWidth, weightFromStroke } from './style.js';
+import { analyzeTextBox, estimateFontSize, baselineOffset, inferAlign, strokeWidth, weightFromStroke, estimateSlant } from './style.js';
 import { inpaint, dilate } from './inpaint.js';
 import { dominantColor, findGraphicRegions } from './regions.js';
 import { visionAvailable, analyzeWithClaude, MODEL } from './vision.js';
@@ -187,11 +187,13 @@ function buildTextLayer(group, raster, textMask, index) {
   const alpha = new Uint8Array(mb.w * mb.h);
   const r = Math.max(2, Math.round(fontSize * 0.06));
   const strokes = [];
+  const slants = [];
   for (const l of lines) {
     const lb = clampBox(pad(l.box, 2), W, H);
     const st = l.style.contrast > 25 ? l.style : analyzeTextBox(raster, lb);
     // Anti-aliasing widens the thresholded stroke by roughly half a pixel per side.
     strokes.push(Math.max(0, strokeWidth(st.mask, lb.w, lb.h) - 0.6) / fontSize);
+    slants.push(estimateSlant(st.mask, lb.w, lb.h));
     const local = dilate(st.mask, lb.w, lb.h, r);
     for (let y = 0; y < lb.h; y++) for (let x = 0; x < lb.w; x++) {
       const gx = lb.x + x, gy = lb.y + y;
@@ -220,7 +222,7 @@ function buildTextLayer(group, raster, textMask, index) {
     fontFamily: ai?.fontFamily || defaultFamily(role),
     fontCategory: ai?.fontCategory || defaultCategory(role),
     fontWeight: ai?.fontWeight || measuredWeight,
-    italic: Boolean(ai?.italic),
+    italic: ai ? Boolean(ai.italic) : median(slants) >= 0.12,
     color,
     align,
     rotation: ai?.rotation && Math.abs(ai.rotation) > 2 ? ai.rotation : 0,

@@ -133,3 +133,24 @@ export function weightFromStroke(ratio) {
   if (ratio < 0.055) return 300;
   return 400;
 }
+
+/**
+ * Slant of the letterforms: shear the ink horizontally by candidate angles and
+ * keep the one whose column histogram is sharpest (upright strokes line up).
+ * Returns the shear (dx/dy) — italics are typically 0.15-0.3.
+ */
+export function estimateSlant(mask, w, h) {
+  let best = 0, bestScore = -1;
+  const cy = h / 2;
+  for (let s = -0.1; s <= 0.4001; s += 0.05) {
+    const hist = new Float32Array(w + h);
+    for (let y = 0; y < h; y++) {
+      const off = Math.round(s * (y - cy)) + (h >> 1); // undo a rightward lean
+      for (let x = 0; x < w; x++) if (mask[y * w + x]) hist[x + off]++;
+    }
+    let score = 0;
+    for (const v of hist) score += v * v;
+    if (score > bestScore) { bestScore = score; best = s; }
+  }
+  return best;
+}

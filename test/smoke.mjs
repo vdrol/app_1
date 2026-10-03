@@ -96,4 +96,42 @@ assert.ok(layout2.layers.some((l) => l.name === 'Cover photo'), 'AI names the de
 await buildExports(dir2, layout2);
 console.log('AI-merge path OK:', t2.map((t) => t.name).join(' | '));
 
+// --- Full-bleed photo cover: type sitting on a textured photograph ---
+const coverDir = await fs.mkdtemp(path.join(os.tmpdir(), 'unflatten-cover-'));
+const CW = 1000, CH = 1300;
+let seed = 7;
+const rand = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);
+const noise = Buffer.alloc(CW * CH * 3);
+for (let i = 0; i < noise.length; i++) noise[i] = rand() * 255;
+const photo = `<svg xmlns="http://www.w3.org/2000/svg" width="${CW}" height="${CH}">
+  <defs><radialGradient id="a"><stop offset="0" stop-color="#e9c9a8"/><stop offset="1" stop-color="#6b4a3a"/></radialGradient>
+  <linearGradient id="b" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#7fa7c9"/><stop offset="1" stop-color="#2c3e50"/></linearGradient></defs>
+  <rect width="${CW}" height="${CH}" fill="url(#b)"/><ellipse cx="520" cy="560" rx="190" ry="240" fill="url(#a)"/>
+  <path d="M200 1300 Q520 700 840 1300Z" fill="#8a2d3b"/><circle cx="150" cy="300" r="120" fill="#c9d6e3" opacity=".5"/></svg>`;
+const type = `<svg xmlns="http://www.w3.org/2000/svg" width="${CW}" height="${CH}">
+  <text x="500" y="200" text-anchor="middle" font-family="DejaVu Serif" font-weight="bold" font-size="190" fill="#ffffff">VOGUE</text>
+  <text x="60" y="420" font-family="DejaVu Sans" font-weight="bold" font-size="54" fill="#ffd400">SUMMER</text>
+  <text x="60" y="480" font-family="DejaVu Sans" font-weight="bold" font-size="54" fill="#ffd400">STYLE</text>
+  <text x="60" y="525" font-family="DejaVu Sans" font-size="28" fill="#ffffff">50 looks to wear now</text>
+  <text x="940" y="760" text-anchor="end" font-family="DejaVu Serif" font-style="italic" font-size="46" fill="#ffffff">The New</text>
+  <text x="940" y="815" text-anchor="end" font-family="DejaVu Serif" font-style="italic" font-size="46" fill="#ffffff">Icons</text>
+  <text x="60" y="1180" font-family="DejaVu Sans" font-weight="bold" font-size="64" fill="#ffffff">BEAUTY SECRETS</text>
+  <text x="60" y="1230" font-family="DejaVu Sans" font-size="30" fill="#ffd400">From the world's top artists</text></svg>`;
+const photoPng = await sharp(Buffer.from(photo)).blur(6)
+  .composite([{ input: await sharp(noise, { raw: { width: CW, height: CH, channels: 3 } }).png().toBuffer(), blend: 'soft-light' }]).png().toBuffer();
+const coverJpg = await sharp(photoPng).composite([{ input: Buffer.from(type) }]).jpeg({ quality: 82 }).toBuffer();
+const cover = await analyzeDesign(coverJpg, coverDir, { useAI: false });
+await shutdownOcr();
+const ct = cover.layers.filter((l) => l.type === 'text');
+const coverText = ct.map((t) => t.text).join(' ').toUpperCase();
+for (const word of ['VOGUE', 'SUMMER', 'STYLE', 'LOOKS', 'NEW', 'ICONS', 'BEAUTY', 'ARTISTS']) assert.ok(coverText.includes(word), `photo cover: expected "${word}" as editable text, got ${JSON.stringify(coverText)}`);
+const vogue = ct.find((t) => t.text.includes('VOGUE'));
+assert.ok(Math.abs(vogue.fontSize - 190) < 35, `photo cover masthead size ~190, got ${vogue.fontSize}`);
+assert.ok(ct.find((t) => /icons/i.test(t.text)).italic, 'italic coverline detected');
+await buildExports(coverDir, cover);
+const coverPsd = readPsd(await fs.readFile(path.join(coverDir, 'design.psd')), { skipLayerImageData: true, skipCompositeImageData: true, skipThumbnail: true });
+assert.ok(!coverPsd.children.some((c) => /original/i.test(c.name)), 'PSD must not embed the flat original');
+assert.equal(coverPsd.children.find((c) => c.name === 'Text').children.length, ct.length);
+console.log('Photo cover OK:', ct.map((t) => JSON.stringify(t.text)).join(' '));
+
 console.log('\nAll checks passed ✔');

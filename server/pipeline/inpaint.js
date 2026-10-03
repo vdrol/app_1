@@ -82,14 +82,15 @@ function addGrain(out, mask, raster) {
     if (mask[i] || mask[i + 1]) continue;
     sum += Math.abs(data[i * 4] - data[(i + 1) * 4]); n++;
   }
-  const amp = Math.min(12, n ? sum / n : 0);
+  // Mean |neighbour difference| of uniform noise is ~1/3 of its range; scale up.
+  const amp = Math.min(60, n ? (sum / n) * 1.6 : 0);
   if (amp < 1.5) return; // flat artwork: keep it perfectly clean
   let seed = 1234567;
   const rnd = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff - 0.5);
   for (let i = 0; i < W * H; i++) {
     if (!mask[i]) continue;
     const g = rnd() * amp;
-    out[i * 4] += g; out[i * 4 + 1] += g; out[i * 4 + 2] += g;
+    out[i * 4] += g + rnd() * amp * 0.5; out[i * 4 + 1] += g + rnd() * amp * 0.5; out[i * 4 + 2] += g + rnd() * amp * 0.5;
   }
 }
 
