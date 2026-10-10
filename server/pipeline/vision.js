@@ -1,19 +1,39 @@
 import Anthropic from '@anthropic-ai/sdk';
 import sharp from 'sharp';
+import { SYSTEM_PROMPT } from './prompt.js';
+import { analyzeWithGemini, geminiKey, GEMINI_MODEL } from './gemini.js';
 
 /**
- * Optional AI layout analysis with Claude's vision. Gives us what OCR can't:
- * correct reading of stylised display type, which lines belong together,
- * typeface identification, and where the photos/illustrations are.
+ * Optional AI layout analysis. Gives us what OCR can't: correct reading of
+ * stylised display type, which lines belong together, typeface identification,
+ * and where the photos/illustrations are.
  *
- * Enabled when ANTHROPIC_API_KEY (or another SDK credential) is configured.
+ * Provider: Claude when ANTHROPIC_API_KEY is set, otherwise Gemini when
+ * GEMINI_API_KEY (or GOOGLE_API_KEY) is set. AI_PROVIDER=claude|gemini forces one.
  */
 export const MODEL = process.env.CLAUDE_MODEL || 'claude-opus-5-5';
 const VISION_SIDE = 1568;
 
-export function visionAvailable() {
-  if (process.env.DISABLE_AI === '1') return false;
-  return Boolean(process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN);
+export function aiProvider() {
+  if (process.env.DISABLE_AI === '1') return null;
+  const claude = Boolean(process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN);
+  const gemini = Boolean(geminiKey());
+  const forced = (process.env.AI_PROVIDER || '').toLowerCase();
+  if (forced === 'claude') return claude ? 'claude' : null;
+  if (forced === 'gemini') return gemini ? 'gemini' : null;
+  return claude ? 'claude' : gemini ? 'gemini' : null;
+}
+
+export const visionAvailable = () => aiProvider() !== null;
+
+export const providerModel = (provider) => (provider === 'gemini' ? GEMINI_MODEL : provider === 'claude' ? MODEL : null);
+
+/** Run layout analysis with whichever provider is configured. */
+export async function analyzeLayout(pngBuffer, width, height) {
+  const provider = aiProvider();
+  if (provider === 'gemini') return { provider, result: await analyzeWithGemini(pngBuffer, width, height) };
+  if (provider === 'claude') return { provider, result: await analyzeWithClaude(pngBuffer, width, height) };
+  throw new Error('No AI provider configured');
 }
 
 const box = {
@@ -65,12 +85,6 @@ const SCHEMA = {
   additionalProperties: false,
 };
 
-const SYSTEM = `You are a senior editorial designer reverse-engineering a flattened magazine or publication layout into editable layers.
-Coordinates are integer pixels in the image you are given, origin top-left; boxes are tight around the visible ink.
-Text blocks: one block per typographic unit that a designer would set as a single text frame (same font, size, colour and alignment). Transcribe exactly, preserving case and line breaks as they appear. Include every legible piece of text, including tiny captions, folios and barcodes' numbers; skip text that is part of a photo (e.g. signage in a street scene) unless it is clearly a design element.
-Fonts: name the closest Google Font (e.g. Playfair Display, Bodoni Moda, Didact Gothic, Oswald, Montserrat, Libre Caslon Text, Abril Fatface, Bebas Neue, Inter, Lora). Mastheads are often Didone serifs or custom wordmarks; pick the nearest match.
-Image regions: photographs, illustrations, logos, and solid colour panels/shapes that sit on top of the page background. Do not list the full-page background itself. On a full-bleed photo cover, list the main subject cut-out only if it overlaps the masthead.`;
-
 export async function analyzeWithClaude(pngBuffer, width, height) {
   const scale = Math.min(1, VISION_SIDE / Math.max(width, height));
   const vw = Math.round(width * scale), vh = Math.round(height * scale);
@@ -84,7 +98,7 @@ export async function analyzeWithClaude(pngBuffer, width, height) {
     fallbacks: 'default',
     thinking: { type: 'adaptive' },
     output_config: { effort: 'high', format: { type: 'json_schema', schema: SCHEMA } },
-    system: SYSTEM,
+    system: SYSTEM_PROMPT,
     messages: [{
       role: 'user',
       content: [

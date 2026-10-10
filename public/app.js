@@ -26,10 +26,11 @@ document.addEventListener('paste', (e) => {
 });
 $('#newBtn').addEventListener('click', () => { history.replaceState(null, '', location.pathname); show('upload'); fileInput.value = ''; });
 
-fetch('/api/health').then((r) => r.json()).then(({ ai }) => {
+fetch('/api/health').then((r) => r.json()).then(({ ai, provider }) => {
   $('#aiToggle').checked = ai;
   $('#aiToggle').disabled = !ai;
-  $('#aiStatus').textContent = ai ? '(Claude reads fonts & layout)' : '(server has no ANTHROPIC_API_KEY — OCR only)';
+  const name = provider === 'gemini' ? 'Gemini' : 'Claude';
+  $('#aiStatus').textContent = ai ? `(${name} reads fonts & layout)` : '(no ANTHROPIC_API_KEY or GEMINI_API_KEY on the server — OCR only)';
 }).catch(() => {});
 
 function show(name) {

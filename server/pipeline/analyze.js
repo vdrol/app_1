@@ -5,7 +5,7 @@ import { detectTextLines } from './ocr.js';
 import { analyzeTextBox, estimateFontSize, baselineOffset, inferAlign, strokeWidth, weightFromStroke, estimateSlant } from './style.js';
 import { inpaint, dilate } from './inpaint.js';
 import { dominantColor, findGraphicRegions } from './regions.js';
-import { visionAvailable, analyzeWithClaude, MODEL } from './vision.js';
+import { visionAvailable, analyzeLayout, providerModel, aiProvider } from './vision.js';
 
 /**
  * Turn a flattened design image into a layered layout:
@@ -25,15 +25,17 @@ export async function analyzeDesign(input, jobDir, { onProgress = () => {}, useA
   for (const l of ocrLines) l.style = analyzeTextBox(raster, clampBox(pad(l.box, 2), W, H));
 
   let ai = aiResult; // injectable for tests
+  let provider = aiResult ? 'test' : null;
   if (!ai && useAI && visionAvailable()) {
-    onProgress('Understanding layout with Claude', 0.35);
+    provider = aiProvider();
+    onProgress(`Understanding layout with ${provider === 'gemini' ? 'Gemini' : 'Claude'}`, 0.35);
     try {
-      ai = await analyzeWithClaude(originalPng, W, H);
+      ({ result: ai } = await analyzeLayout(originalPng, W, H));
     } catch (err) {
-      warnings.push(`AI layout analysis unavailable (${err.message}); used OCR only.`);
+      warnings.push(`AI layout analysis failed (${aiErrorMessage(err)}); used OCR only.`);
     }
   } else if (!ai && useAI) {
-    warnings.push('Set ANTHROPIC_API_KEY to enable AI font matching and smarter text grouping. Using OCR only.');
+    warnings.push('Set ANTHROPIC_API_KEY or GEMINI_API_KEY to enable AI font matching and smarter text grouping. Using OCR only.');
   }
 
   onProgress('Measuring typography', 0.6);
@@ -104,11 +106,21 @@ export async function analyzeDesign(input, jobDir, { onProgress = () => {}, useA
     background: { ...background, src: 'background.png' },
     original: 'original.png',
     layers: [...imageLayers, ...textLayers],
-    meta: { ai: Boolean(ai), model: ai ? MODEL : null, warnings, createdAt: new Date().toISOString() },
+    meta: { ai: Boolean(ai), provider: ai ? provider : null, model: ai ? providerModel(provider) : null, warnings, createdAt: new Date().toISOString() },
   };
   await fs.writeFile(path.join(jobDir, 'layout.json'), JSON.stringify(layout, null, 2));
   onProgress('Done', 1);
   return layout;
+}
+
+/** Short, actionable message for common provider errors (bad key, quota). */
+function aiErrorMessage(err) {
+  const msg = String(err?.message || err);
+  const status = err?.status ?? Number(/\b(400|401|403|404|429)\b/.exec(msg)?.[1]);
+  if (status === 401 || status === 403 || /API key not valid|invalid x-api-key|API_KEY_INVALID/i.test(msg)) return 'the API key was rejected — check it';
+  if (status === 429 || /quota|RESOURCE_EXHAUSTED|rate limit/i.test(msg)) return 'rate limit or free-tier quota reached — try again later';
+  if (status === 404 || /not found/i.test(msg)) return 'model not available for this key — set GEMINI_MODEL or CLAUDE_MODEL';
+  return msg.length > 160 ? `${msg.slice(0, 160)}…` : msg;
 }
 
 const pad = (b, p) => ({ x: b.x - p, y: b.y - p, w: b.w + 2 * p, h: b.h + 2 * p });

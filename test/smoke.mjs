@@ -134,4 +134,39 @@ assert.ok(!coverPsd.children.some((c) => /original/i.test(c.name)), 'PSD must no
 assert.equal(coverPsd.children.find((c) => c.name === 'Text').children.length, ct.length);
 console.log('Photo cover OK:', ct.map((t) => JSON.stringify(t.text)).join(' '));
 
+// --- Gemini provider, end to end against a local mock of the Gemini API ---
+{
+  const http = await import('node:http');
+  const reply = {
+    backgroundColor: 'photo',
+    textBlocks: [{ text: 'VOGUE', box_2d: [45, 107, 156, 882], role: 'masthead', fontFamily: 'Bodoni Moda', fontCategory: 'serif', fontWeight: 700, italic: false, color: '#ffffff', align: 'center', rotation: 0 }],
+    imageRegions: [],
+  };
+  let hits = 0;
+  const srv = http.createServer((req, res) => {
+    req.resume();
+    req.on('end', () => {
+      hits++;
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ candidates: [{ content: { role: 'model', parts: [{ text: JSON.stringify(reply) }] }, finishReason: 'STOP' }] }));
+    });
+  }).listen(0);
+  await new Promise((r) => srv.on('listening', r));
+  const saved = { ...process.env };
+  delete process.env.ANTHROPIC_API_KEY; delete process.env.ANTHROPIC_AUTH_TOKEN;
+  process.env.GEMINI_API_KEY = 'test-key';
+  process.env.GOOGLE_GEMINI_BASE_URL = `http://localhost:${srv.address().port}`;
+  const gDir = await fs.mkdtemp(path.join(os.tmpdir(), 'unflatten-gemini-'));
+  const gl = await analyzeDesign(coverJpg, gDir);
+  await shutdownOcr();
+  srv.close();
+  process.env = saved;
+  assert.equal(hits, 1, 'Gemini API called once');
+  assert.equal(gl.meta.provider, 'gemini');
+  const gv = gl.layers.find((l) => l.type === 'text' && l.text === 'VOGUE');
+  assert.ok(gv && gv.fontFamily === 'Bodoni Moda', 'Gemini font suggestion applied to masthead');
+  assert.ok(gl.layers.filter((l) => l.type === 'text').length >= 6, 'OCR lines Gemini skipped are still kept');
+  console.log('Gemini provider OK:', gl.meta.model);
+}
+
 console.log('\nAll checks passed ✔');

@@ -24,7 +24,7 @@ image ─► OCR (4 preprocessing passes + per-line re-read) ─┐
 ```
 
 1. **Text detection.** Tesseract runs on the original and greyscale page plus Sauvola-binarised maps (light-on-dark and dark-on-light, at two window sizes, plus a half-size pass for giant mastheads). The binarised maps strip a photographic background down to crisp letterforms, so type printed over photos is found too. Lines are split at column gutters, de-duplicated, then each line is re-read from a crop binarised with its own ink and paper colours.
-2. **Layout understanding (optional, recommended).** With an Anthropic API key, Claude reads the page to group lines into text frames, transcribe stylised display type, label roles (masthead, headline, body…), suggest the closest Google Font, and find photos. Its blocks are snapped to the precise OCR boxes.
+2. **Layout understanding (optional, recommended).** With an Anthropic or Gemini API key, the model reads the page to group lines into text frames, transcribe stylised display type, label roles (masthead, headline, body…), suggest the closest Google Font, and find photos. Its blocks are snapped to the precise OCR boxes. (Gemini returns its native `box_2d` 0–1000 coordinates, which are converted to pixels.)
 3. **Typography measurement.** Font size comes from line-box height and glyph classes (caps, ascenders, descenders). Leading comes from baseline pitch, colour from 2-means ink/paper clustering, weight from stroke width, and alignment from line edges.
 4. **Background reconstruction.** Text pixels (with anti-aliasing) are masked and filled with a push–pull pyramid inpainter, with grain re-added on textured backgrounds.
 5. **Image separation.** On flat backgrounds, large non-background regions (photos, panels, shapes) become their own layers with alpha, and are knocked out of the background plate. On photographic covers, Claude's regions are lifted as layers.
@@ -38,17 +38,27 @@ npm install
 npm start                       # http://localhost:3000
 ```
 
-Turn on AI layout analysis (strongly recommended for real magazine pages):
+Turn on AI layout analysis (strongly recommended for real magazine pages) with **either** provider:
 
 ```bash
+# Claude
 export ANTHROPIC_API_KEY=sk-ant-...
+
+# or Google Gemini (has a free tier: create a key at https://aistudio.google.com/apikey)
+export GEMINI_API_KEY=...
+
 npm start
 ```
+
+If both keys are set, Claude is used; set `AI_PROVIDER=gemini` to prefer Gemini.
 
 | Env var | Default | |
 |---|---|---|
 | `ANTHROPIC_API_KEY` | — | Turns on Claude vision analysis |
-| `CLAUDE_MODEL` | `claude-opus-5-5` | Model used for layout analysis |
+| `CLAUDE_MODEL` | `claude-opus-5-5` | Claude model used for layout analysis |
+| `GEMINI_API_KEY` (or `GOOGLE_API_KEY`) | — | Turns on Gemini vision analysis |
+| `GEMINI_MODEL` | `gemini-flash-latest` | Gemini model used for layout analysis |
+| `AI_PROVIDER` | auto | `claude` or `gemini` to force one when both keys are set |
 | `DISABLE_AI` | — | Set to `1` to force OCR-only mode |
 | `PORT` | `3000` | |
 | `DATA_DIR` | `./data/jobs` | Where uploads and outputs are stored (deleted after 24h) |

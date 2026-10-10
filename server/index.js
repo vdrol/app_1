@@ -5,7 +5,7 @@ import express from 'express';
 import multer from 'multer';
 import { customAlphabet } from 'nanoid';
 import { analyzeDesign } from './pipeline/analyze.js';
-import { visionAvailable } from './pipeline/vision.js';
+import { aiProvider, providerModel } from './pipeline/vision.js';
 import { buildExports } from './export/index.js';
 import { sanitizeLayout } from './validate.js';
 
@@ -32,7 +32,7 @@ const app = express();
 app.use(express.json({ limit: '5mb' }));
 app.use(express.static(path.join(ROOT, 'public')));
 
-app.get('/api/health', (_req, res) => res.json({ ok: true, ai: visionAvailable() }));
+app.get('/api/health', (_req, res) => res.json({ ok: true, ai: aiProvider() !== null, provider: aiProvider(), model: providerModel(aiProvider()) }));
 
 app.post('/api/jobs', upload.single('image'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'Upload a PNG, JPG, WEBP or TIFF image in the "image" field.' });
@@ -122,5 +122,6 @@ setInterval(async () => {
 
 app.listen(PORT, () => {
   console.log(`Design Unflattener running at http://localhost:${PORT}`);
-  console.log(visionAvailable() ? 'AI layout analysis: enabled' : 'AI layout analysis: disabled (set ANTHROPIC_API_KEY to enable)');
+  const p = aiProvider();
+  console.log(p ? `AI layout analysis: ${p} (${providerModel(p)})` : 'AI layout analysis: disabled (set ANTHROPIC_API_KEY or GEMINI_API_KEY to enable)');
 });

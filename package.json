@@ -19,6 +19,7 @@
   "homepage": "https://github.com/vdrol/app_1#readme",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.131.0",
+    "@google/genai": "^2.28.0",
     "@tesseract.js-data/eng": "^1.0.0",
     "ag-psd": "^31.0.2",
     "archiver": "^8.0.0",
